@@ -1,0 +1,31 @@
+{
+	"admin/modem/huawei_hilink": {
+		"title": "Huawei HiLink",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "huawei_hilink/details"
+		},
+		"depends": {
+			"acl": [ "luci-app-huawei-hilink" ],
+			"uci": { "hilink": true }
+		}
+	},
+	"admin/modem/huawei_hilink/detail": {
+		"title": "Details",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "huawei_hilink/details"
+		}
+	},
+
+	"admin/modem/huawei_hilink/config": {
+		"title": "Configuration",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "huawei_hilink/config"
+		}
+	}
+}
