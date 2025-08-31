@@ -1,0 +1,3 @@
+#!/bin/sh
+
+ln -s /usr/bin/huawei_hilink /www/cgi-bin/huawei_hilink
