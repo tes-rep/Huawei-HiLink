@@ -2,11 +2,12 @@ name: Build IPK
 
 on:
   push:
-    branches:
-      - master
-    paths:
-      - 'luci-app-huawei-hilink/Makefile'
+    branches: [ master ]
+    paths: [ 'luci-app-huawei-hilink/Makefile' ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -76,8 +77,6 @@ jobs:
 
       - name: 🚀 Generate new tag & release
         uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           name: ${{ env.PKG_NAME }}
           tag_name: ${{ env.PKG_VERSION }}
@@ -86,3 +85,4 @@ jobs:
           files: ${{ env.PKG_PATH }}
           body: |
             ### V ${{ env.PKG_VERSION }}
+          token: ${{ secrets.GITHUB_TOKEN }}
