@@ -1,0 +1,11 @@
+{
+	"luci-app-huawei-hilink": {
+		"description": "Grant UCI access for luci-app-huawei-hilink",
+		"read": {
+			"uci": [ "hilink" ]
+		},
+		"write": {
+			"uci": [ "hilink" ]
+		}
+	}
+}
