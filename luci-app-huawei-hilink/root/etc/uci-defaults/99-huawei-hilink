@@ -1,6 +1,8 @@
 #!/bin/sh
 
-ln -s /usr/bin/huawei_hilink /www/cgi-bin/huawei_hilink
+if [ ! -L /www/cgi-bin/huawei_hilink ]; then
+    ln -s /usr/bin/huawei_hilink /www/cgi-bin/huawei_hilink
+fi
 
 sleep 1
 
