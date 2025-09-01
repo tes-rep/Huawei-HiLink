@@ -10,4 +10,5 @@ LuCI support for Huawei HiLink modem
 ### Preview
 
 ![](https://raw.githubusercontent.com/Maizil41/Huawei-HiLink/refs/heads/main/img/view.png)
+![](https://raw.githubusercontent.com/Maizil41/Huawei-HiLink/refs/heads/main/img/device.png)
 ![](https://raw.githubusercontent.com/Maizil41/Huawei-HiLink/refs/heads/main/img/config.png)
