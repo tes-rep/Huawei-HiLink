@@ -8,9 +8,6 @@ printf '%s\n' \
   'Access-Control-Allow-Headers: Content-Type, X-Requested-With, __RequestVerificationToken'
 printf '\n'
 
-# -------------------------------
-# Helpers (encoding / JSON / HTTP)
-# -------------------------------
 url_decode() {
   local d="${1//+/ }"
   printf '%b' "${d//%/\\x}"
@@ -51,21 +48,51 @@ fail() {
 
 xget() { printf '%s' "$1" | tr -d '\n' | sed -n "s:.*<$2>\\([^<]*\\)</$2>.*:\\1:p"; }
 
-fmt_time()  { awk -v S="${1:-0}" 'BEGIN{h=int(S/3600); m=int((S%3600)/60); s=S%60; printf("%d:%02d:%02d", h, m, s);}'; }
 fmt_bytes() { awk -v B="${1:-0}" 'BEGIN{u[0]="B";u[1]="kB";u[2]="MB";u[3]="GB";u[4]="TB";i=0; x=B+0; while (x>=1024 && i<4){ x=x/1024; i++ } printf("%.2f %s", x, u[i]);}'; }
+fmt_bits()  {
+  awk -v B="${1:-0}" 'BEGIN{
+    u[0]="b/s"; u[1]="Kb/s"; u[2]="Mb/s"; u[3]="Gb/s"; u[4]="Tb/s";
+    x=B*8.0; i=0; while (x>=1000 && i<4){ x=x/1000; i++ }
+    printf("%.2f %s", x, u[i]);
+  }'
+}
+fmt_time() {
+  local input="$1" total_sec=0
 
-# -------------------------------
-# Resolve HOST
-# -------------------------------
+  if [[ "$input" =~ ^[0-9]+:[0-9][0-9]:[0-9][0-9]$ ]]; then
+    local h=${input%%:*}
+    local ms=${input#*:}
+    local m=${ms%%:*}
+    local s=${ms#*:}
+    total_sec=$(( h*3600 + m*60 + s ))
+  elif [[ "$input" =~ ^[0-9]+$ ]]; then
+    total_sec=$input
+  else
+    printf "-"
+    return
+  fi
+
+  local d h m s
+  s=$(( total_sec % 60 ))
+  total_sec=$(( total_sec / 60 ))
+  m=$(( total_sec % 60 ))
+  total_sec=$(( total_sec / 60 ))
+  h=$(( total_sec % 24 ))
+  d=$(( total_sec / 24 ))
+
+  if [ $d -gt 0 ]; then
+    printf "%dd %02d:%02d:%02d" "$d" "$h" "$m" "$s"
+  else
+    printf "%02d:%02d:%02d" "$h" "$m" "$s"
+  fi
+}
+
 ip="$(uci -q get hilink.auth.ip 2>/dev/null)"
 [ -n "$ip" ] && UCI_HOST="http://$ip" || UCI_HOST=""
 HOST="$(kv_get host 2>/dev/null || true)"
 [ -z "$HOST" ] && HOST="$UCI_HOST"
 [ -z "$HOST" ] && HOST="http://192.168.8.1"
 
-# -------------------------------
-# Token & Session
-# -------------------------------
 TOK="$(curlq "$HOST/api/webserver/SesTokInfo" || true)"
 [ -n "$TOK" ] || fail "failed_SesTokInfo"
 SESSION="$(xget "$TOK" 'SesInfo')"
@@ -81,46 +108,37 @@ fetch_ep() {
     "$HOST/$1"
 }
 
-# -------------------------------
-# Fetch XML endpoints
-# -------------------------------
-XML_CURPLMN="$(fetch_ep 'api/net/current-plmn'           || true)"
-XML_STATUS="$(fetch_ep 'api/monitoring/status'           || true)"
-XML_SIGNAL="$(fetch_ep 'api/device/signal'               || true)"
-XML_SIGPARA="$(fetch_ep 'api/net/signal-para'            || true)"
-XML_DEVINFO="$(fetch_ep 'api/device/basic_information'   || true)"
-XML_ADDPRM="$(fetch_ep 'config/deviceinformation/add_param.xml' || true)"
+XML_CURPLMN="$(fetch_ep 'api/net/current-plmn'                 || true)"
+XML_STATUS="$(fetch_ep 'api/monitoring/status'                 || true)"
+XML_SIGNAL="$(fetch_ep 'api/device/signal'                     || true)"
+XML_SIGPARA="$(fetch_ep 'api/net/signal-para'                  || true)"
+XML_DEVINFO="$(fetch_ep 'api/device/basic_information'         || true)"
+XML_TRAFFIC="$(fetch_ep 'api/monitoring/traffic-statistics'    || true)"
+XML_ADDPRM="$(fetch_ep 'config/deviceinformation/add_param.xml'|| true)"
 
-[ -n "$XML_SIGNAL$XML_STATUS$XML_CURPLMN$XML_ADDPRM$XML_SIGPARA" ] || fail "API_Not_Responding"
+[ -n "$XML_SIGNAL$XML_STATUS$XML_CURPLMN$XML_ADDPRM$XML_SIGPARA" ] || fail "API Not Responding"
 
-# -------------------------------
-# Constants & initial parsing
-# -------------------------------
-CURRENT_NETWORK_NO_SERVICE=0
 MODE_2G=0
 MODE_3G=2
 MODE_4G=7
 
-cur_type_ex="$(xget "$XML_STATUS" 'CurrentNetworkTypeEx')"
-[ -n "$cur_type_ex" ] || cur_type_ex="$(xget "$XML_STATUS" 'CurrentNetworkType')"
+cur_type_ex="$(xget "$XML_STATUS" 'CurrentNetworkType')"
+sim_status="$(xget "$XML_STATUS" 'SimStatus')"
 
 sg_mode="$(xget "$XML_SIGNAL" 'mode')"
-sg_cellid_dec="$(xget "$XML_SIGNAL" 'cell_id')"
+sg_pci="$(xget "$XML_SIGNAL" 'pci')"
 sg_rssi="$(xget "$XML_SIGNAL" 'rssi')"
 sg_rsrp="$(xget "$XML_SIGNAL" 'rsrp')"
 sg_rsrq="$(xget "$XML_SIGNAL" 'rsrq')"
 sg_sinr="$(xget "$XML_SIGNAL" 'sinr')"
-sg_rscp="$(xget "$XML_SIGNAL" 'rscp')"
-sg_ecio="$(xget "$XML_SIGNAL" 'ecio')"
-sg_pci="$(xget "$XML_SIGNAL" 'pci')"
+sg_cell="$(xget "$XML_SIGNAL" 'cell_id')"
+
+sg_rscp="$(xget "$XML_SIGPARA" 'Rscp')"
+sg_ecio="$(xget "$XML_SIGPARA" 'Ecio')"
 
 dev_name="$(xget "$XML_DEVINFO" 'devicename')"
 dev_sw="$(xget "$XML_DEVINFO" 'SoftwareVersion')"
 dev_webui="$(xget "$XML_DEVINFO" 'WebUIVersion')"
-
-np_Lac_hex="$(xget "$XML_SIGPARA" 'Lac')"
-np_CellID_hex="$(xget "$XML_SIGPARA" 'CellID')"
-np_Rssi="$(xget "$XML_SIGPARA" 'Rssi')"
 
 plmn_num="$(xget "$XML_CURPLMN" 'Numeric')"
 op_short="$(xget "$XML_CURPLMN" 'ShortName')"
@@ -131,9 +149,21 @@ ap_earfcn1="$(xget "$XML_ADDPRM" 'earfcn1')"
 ap_earfcn2="$(xget "$XML_ADDPRM" 'earfcn2')"
 ap_bw1="$(xget "$XML_ADDPRM" 'bandwidth1')"
 ap_bw2="$(xget "$XML_ADDPRM" 'bandwidth2')"
+ap_freq1="$(xget "$XML_ADDPRM" 'freq1')"
+ap_freq2="$(xget "$XML_ADDPRM" 'freq2')"
 ap_lac_hex="$(xget "$XML_ADDPRM" 'lac')"
 ap_cell_hex="$(xget "$XML_ADDPRM" 'cell_id')"
 ap_rssi="$(xget "$XML_ADDPRM" 'rssi')"
+
+cur_dl_rate="$(xget "$XML_TRAFFIC" 'CurrentDownloadRate')"
+cur_ul_rate="$(xget "$XML_TRAFFIC" 'CurrentUploadRate')"
+cur_dl="$(xget "$XML_TRAFFIC" 'CurrentDownload')"
+cur_ul="$(xget "$XML_TRAFFIC" 'CurrentUpload')"
+tot_dl="$(xget "$XML_TRAFFIC" 'TotalDownload')"
+tot_ul="$(xget "$XML_TRAFFIC" 'TotalUpload')"
+cur_conn="$(xget "$XML_TRAFFIC" 'CurrentConnectTime')"
+tot_conn="$(xget "$XML_TRAFFIC" 'TotalConnectTime')"
+[ -z "$tot_conn" ] && tot_conn="$cur_conn"
 
 band_mhz_by_lte() {
   case "$1" in
@@ -151,21 +181,18 @@ band_mhz_by_lte() {
   esac
 }
 
-# -------------------------------
-# Determine device/network mode
-# -------------------------------
 device_mode="$sg_mode"
 [ -z "$device_mode" ] && device_mode="$cur_type_ex"
 case "$device_mode" in
   ''|*[!0-9]*)
     case "$sg_mode" in
-      *LTE*|*lte*)                 device_mode="$MODE_4G" ;;
-      *WCDMA*|*UMTS*|*HSPA*|*3G*)  device_mode="$MODE_3G" ;;
-      *GSM*|*EDGE*|*2G*)           device_mode="$MODE_2G" ;;
-      *)                            device_mode=""        ;;
+      *LTE*|*lte*) device_mode="$MODE_4G" ;;
+      *WCDMA*|*UMTS*|*HSPA*|*3G*) device_mode="$MODE_3G" ;;
+      *GSM*|*EDGE*|*2G*) device_mode="$MODE_2G" ;;
+      *) device_mode="" ;;
     esac
   ;;
- esac
+esac
 
 pci_id="$sg_pci"; [ -n "$pci_id" ] || pci_id="-"
 
@@ -173,7 +200,7 @@ is_lte_hint=""
 [ -n "$ap_earfcn1$ap_earfcn2" ] && is_lte_hint=1
 [ -n "$ap_band" ] && is_lte_hint=1
 
-cell_hex_raw="$ap_cell_hex"; [ -z "$cell_hex_raw" ] && cell_hex_raw="$np_CellID_hex"
+cell_hex_raw="$ap_cell_hex"; [ -z "$cell_hex_raw" ]
 
 lte_metric_hint=""
 [ -n "$sg_rsrp$sg_rsrq$sg_sinr" ] && lte_metric_hint=1
@@ -182,24 +209,24 @@ lte_metric_hint=""
 wcdma_metric_hint=""
 [ -n "$sg_rscp$sg_ecio" ] && wcdma_metric_hint=1
 
-lac_hex="$ap_lac_hex"; [ -z "$lac_hex" ] && lac_hex="$np_Lac_hex"
+lac_hex="$ap_lac_hex"; [ -z "$lac_hex" ]
 [ -n "$lac_hex" ] && lac_hex="$(printf '%s' "$lac_hex" | tr '[:lower:]' '[:upper:]')"
 
 lac_dec=""
 [ -n "$lac_hex" ] && lac_dec=$(( 0x${lac_hex} ))
 
 cell_dec=""; cell_hex=""
-if [ -n "$sg_cellid_dec" ]; then
-  cell_dec="$sg_cellid_dec"
-  cell_hex="$(printf '%X' "$sg_cellid_dec")"
+if [ -n "$sg_cell" ]; then
+  cell_dec="$sg_cell"
+  cell_hex="$(printf '%X' "$sg_cell")"
 else
-  cell_hex="$ap_cell_hex"; [ -z "$cell_hex" ] && cell_hex="$np_CellID_hex"
+  cell_hex="$ap_cell_hex"; [ -z "$cell_hex" ]
   [ -n "$cell_hex" ] && cell_dec=$(( 0x${cell_hex} ))
 fi
 
 if [ -z "$device_mode" ] || ! echo "$device_mode" | grep -q '^[0-9]\+$' || [ "$device_mode" = "$CURRENT_NETWORK_NO_SERVICE" ]; then
   if   [ -n "$is_lte_hint$lte_metric_hint" ]; then device_mode="$MODE_4G"
-  elif [ -n "$wcdma_metric_hint" ];           then device_mode="$MODE_3G"
+  elif [ -n "$wcdma_metric_hint" ]; then device_mode="$MODE_3G"
   elif [ -n "$cell_dec" ] && [ "$cell_dec" -lt 65536 ]; then device_mode="$MODE_2G"
   else device_mode=""; fi
 fi
@@ -214,19 +241,10 @@ if [ -n "$ap_band" ]; then
   if [ -n "$_mhz" ]; then band_txt="B${ap_band} (${_mhz}MHz)"; else band_txt="B${ap_band}"; fi
 fi
 
-mode_name=""
-case "$device_mode" in
-  "$MODE_4G") mode_name="4G (LTE)" ;;
-  "$MODE_3G") mode_name="3G (HSPA)";;
-  "$MODE_2G") mode_name="2G (EDGE)";;
-  ''|"$CURRENT_NETWORK_NO_SERVICE") mode_name="" ;;
-  *) mode_name="" ;;
- esac
-
 operator=""; [ -n "$op_short" ] && operator="$op_short"; [ -z "$operator" ] && [ -n "$op_full" ] && operator="$op_full"
 plmn="$plmn_num"
 
-rssi_val="$sg_rssi"; [ -z "$rssi_val" ] && rssi_val="$ap_rssi"; [ -z "$rssi_val" ] && rssi_val="$np_Rssi"
+rssi_val="$sg_rssi"; [ -z "$rssi_val" ] && rssi_val="$ap_rssi"; [ -z "$rssi_val" ]
 if [ -n "$rssi_val" ]; then
   rssi_val="${rssi_val//&gt;/>}"
   rssi_val="${rssi_val//&lt;/<}"
@@ -248,50 +266,21 @@ enb_rnc=""; ci=""
 if [ -n "$cell_dec" ]; then
   if   [ "$device_mode" = "$MODE_4G" ]; then enb_rnc=$(( cell_dec >> 8 ));  ci=$(( cell_dec % 256   ))
   elif [ "$device_mode" = "$MODE_3G" ]; then enb_rnc=$(( cell_dec >> 16 )); ci=$(( cell_dec % 65536 ))
-  fi
+fi
 fi
 
-# -------------------------------
-# Interface stats via UCI/ubus
-# -------------------------------
-IF_NET="$(uci -q get hilink.auth.network 2>/dev/null | sed 's/^@//')"; [ -z "$IF_NET" ] && IF_NET="wan"
-IF_JSON="$(ubus -S call "network.interface.${IF_NET}" status 2>/dev/null)"
-UPTIME=0; L3DEV=""; RX_BYTES=0; TX_BYTES=0; RX_PKTS=0; TX_PKTS=0
+CUR_TIME="$(fmt_time "${cur_conn:-0}")"
+TOT_TIME="$(fmt_time "${tot_conn:-0}")"
+CUR_RX="$(fmt_bytes "${cur_dl:-0}")"
+CUR_TX="$(fmt_bytes "${cur_ul:-0}")"
+TOT_RX="$(fmt_bytes "${tot_dl:-0}")"
+TOT_TX="$(fmt_bytes "${tot_ul:-0}")"
 
-if [ -n "$IF_JSON" ]; then
-  UPTIME="$(jsonfilter -s "$IF_JSON" -e '@.uptime'     2>/dev/null)"
-  L3DEV="$(jsonfilter -s "$IF_JSON" -e '@.l3_device'  2>/dev/null)"
-fi
+SPEED_RX_TXT=""
+SPEED_TX_TXT=""
+[ -n "$cur_dl_rate" ] && SPEED_RX_TXT="$(fmt_bits "$cur_dl_rate")"
+[ -n "$cur_ul_rate" ] && SPEED_TX_TXT="$(fmt_bits "$cur_ul_rate")"
 
-if [ -n "$L3DEV" ]; then
-  DEV_JSON="$(ubus -S call network.device status "{\"name\":\"$L3DEV\"}" 2>/dev/null)"
-  if [ -n "$DEV_JSON" ]; then
-    RX_BYTES="$(jsonfilter -s "$DEV_JSON" -e '@.statistics.rx_bytes'   2>/dev/null)"
-    TX_BYTES="$(jsonfilter -s "$DEV_JSON" -e '@.statistics.tx_bytes'   2>/dev/null)"
-    RX_PKTS="$(jsonfilter -s "$DEV_JSON" -e '@.statistics.rx_packets'  2>/dev/null)"
-    TX_PKTS="$(jsonfilter -s "$DEV_JSON" -e '@.statistics.tx_packets'  2>/dev/null)"
-  fi
-fi
-
-if [ -z "$RX_BYTES" ] || [ -z "$TX_BYTES" ]; then
-  if [ -n "$L3DEV" ] && grep -q "$L3DEV" /proc/net/dev 2>/dev/null; then
-    set -- $(awk -v IF="$L3DEV" -F'[: ]+' '$1==IF { rxb=$3; rxp=$4; txb=$11; txp=$12; print rxb, rxp, txb, txp }' /proc/net/dev 2>/dev/null)
-    [ -n "$1" ] && RX_BYTES="$1"
-    [ -n "$2" ] && RX_PKTS="$2"
-    [ -n "$3" ] && TX_BYTES="$3"
-    [ -n "$4" ] && TX_PKTS="$4"
-  fi
-fi
-
-CONN_TIME="$(fmt_time   "${UPTIME:-0}")"
-CONN_RX_HR="$(fmt_bytes "${RX_BYTES:-0}")"
-CONN_TX_HR="$(fmt_bytes "${TX_BYTES:-0}")"
-CONN_RX_TXT="$CONN_RX_HR"
-CONN_TX_TXT="$CONN_TX_HR"
-
-# -------------------------------
-# JSON output
-# -------------------------------
 JSON_OUT="$(
   {
     printf '{'
@@ -299,34 +288,62 @@ JSON_OUT="$(
       printf '"host":"%s",' "$(json_escape "$HOST")"
       printf '"message":"Powered By Mutiara-Wrt",'
       printf '"data":{'
-        printf '"plmn":'; [ -n "$plmn" ] && printf '"%s",' "$(json_escape "$plmn")" || printf 'null,'
-        printf '"operator":'; [ -n "$operator" ] && printf '"%s",' "$(json_escape "$operator")" || printf 'null,'
-        printf '"device_mode":'; [ -n "$device_mode" ] && printf '%s,' "$device_mode" || printf 'null,'
-        printf '"network_mode":"%s",' "$(json_escape "$mode_name")"
-        printf '"pci":'; [ -n "$pci_id" ] && printf '"%s",' "$(json_escape "$pci_id")" || printf 'null,'
-        printf '"rssi":'; [ -n "$rssi_val" ] && printf '"%s",' "$(json_escape "$rssi_val")" || printf 'null,'
-        printf '"rsrp":'; [ -n "$sg_rsrp" ] && printf '"%s",' "$(json_escape "$sg_rsrp")" || printf 'null,'
-        printf '"sinr":'; [ -n "$sg_sinr" ] && printf '"%s",' "$(json_escape "$sg_sinr")" || printf 'null,'
-        printf '"rsrq":'; [ -n "$sg_rsrq" ] && printf '"%s",' "$(json_escape "$sg_rsrq")" || printf 'null,'
-        printf '"rscp":'; [ -n "$sg_rscp" ] && printf '"%s",' "$(json_escape "$sg_rscp")" || printf 'null,'
-        printf '"ecio":'; [ -n "$sg_ecio" ] && printf '"%s",' "$(json_escape "$sg_ecio")" || printf 'null,'
-        printf '"lac_dec":'; [ -n "$lac_dec" ] && printf '%s,' "$lac_dec" || printf 'null,'
-        printf '"lac_hex":'; [ -n "$lac_hex" ] && printf '"%s",' "$(json_escape "$lac_hex")" || printf 'null,'
-        printf '"cell_id_dec":'; [ -n "$cell_dec" ] && printf '%s,' "$cell_dec" || printf 'null,'
-        printf '"cell_id_hex":'; [ -n "$cell_hex" ] && printf '"%s",' "$(json_escape "$cell_hex")" || printf 'null,'
-        printf '"enb_rnc":'; [ -n "$enb_rnc" ] && printf '%s,'   "$enb_rnc" || printf 'null,'
-        printf '"cell_index":'; [ -n "$ci" ] && printf '%s,'   "$ci" || printf 'null,'
-        printf '"earfcn_dl":'; [ -n "$ap_earfcn1" ] && printf '"%s",' "$(json_escape "$ap_earfcn1")" || printf 'null,'
-        printf '"earfcn_ul":'; [ -n "$ap_earfcn2" ] && printf '"%s",' "$(json_escape "$ap_earfcn2")" || printf 'null,'
-        printf '"bandwidth_dl_mhz":';[ -n "$bw_dl" ] && printf '%s,' "$bw_dl" || printf 'null,'
-        printf '"bandwidth_ul_mhz":';[ -n "$bw_ul" ] && printf '%s,' "$bw_ul" || printf 'null,'
-        printf '"band":'; if [ -n "$band_txt" ]; then printf '"%s",' "$(json_escape "$band_txt")"; else printf 'null,'; fi
-        printf '"connt":"%s",'  "$(json_escape "$CONN_TIME")"
-        printf '"connrx":"%s",' "$(json_escape "$CONN_RX_TXT")"
-        printf '"conntx":"%s",' "$(json_escape "$CONN_TX_TXT")"
-        printf '"devicename":'; [ -n "$dev_name" ] && printf '"%s",' "$(json_escape "$dev_name")" || printf 'null,'
-        printf '"software_version":'; [ -n "$dev_sw" ] && printf '"%s",' "$(json_escape "$dev_sw")" || printf 'null,'
-        printf '"webui_version":'; if [ -n "$dev_webui" ]; then printf '"%s"' "$(json_escape "$dev_webui")"; else printf 'null'; fi
+
+        printf '"network":{'
+          printf '"operator":'; [ -n "$operator" ] && printf '"%s",' "$(json_escape "$operator")" || printf 'null,'
+          printf '"status":'; [ -n "$sim_status" ] && printf '"%s",' "$(json_escape "$sim_status")" || printf 'null,'
+          printf '"plmn":'; [ -n "$plmn" ] && printf '"%s",' "$(json_escape "$plmn")" || printf 'null,'
+          printf '"net_mode":'; [ -n "$device_mode" ] && printf '"%s",' "$device_mode" || printf 'null,'
+
+          printf '"pci":'; [ -n "$sg_pci" ] && printf '"%s",' "$(json_escape "$sg_pci")" || printf 'null,'
+          printf '"rssi":'; [ -n "$rssi_val" ] && printf '"%s",' "$(json_escape "$rssi_val")" || printf 'null,'
+          printf '"rsrp":'; [ -n "$sg_rsrp" ] && printf '"%s",' "$(json_escape "$sg_rsrp")" || printf 'null,'
+          printf '"sinr":'; [ -n "$sg_sinr" ] && printf '"%s",' "$(json_escape "$sg_sinr")" || printf 'null,'
+          printf '"rsrq":'; [ -n "$sg_rsrq" ] && printf '"%s",' "$(json_escape "$sg_rsrq")" || printf 'null,'
+          printf '"rscp":'; [ -n "$sg_rscp" ] && printf '"%s",' "$(json_escape "$sg_rscp")" || printf 'null,'
+          printf '"ecio":'; [ -n "$sg_ecio" ] && printf '"%s",' "$(json_escape "$sg_ecio")" || printf 'null,'
+
+          printf '"lac_dec":'; [ -n "$lac_dec" ] && printf '%s,' "$lac_dec" || printf 'null,'
+          printf '"lac_hex":'; [ -n "$lac_hex" ] && printf '"%s",' "$(json_escape "$lac_hex")" || printf 'null,'
+          printf '"cell_id_dec":'; [ -n "$cell_dec" ] && printf '%s,' "$cell_dec" || printf 'null,'
+          printf '"cell_id_hex":'; [ -n "$cell_hex" ] && printf '"%s",' "$(json_escape "$cell_hex")" || printf 'null,'
+          printf '"enb_rnc":'; [ -n "$enb_rnc" ] && printf '%s,' "$enb_rnc" || printf 'null,'
+          printf '"cell_index":'; [ -n "$ci" ] && printf '%s,' "$ci" || printf 'null,'
+
+          # band + EARFCN
+          printf '"band":'; if [ -n "$band_txt" ]; then printf '"%s",' "$(json_escape "$band_txt")"; else printf 'null,'; fi
+          printf '"earfcn_dl":'; [ -n "$ap_earfcn1" ] && printf '"%s",' "$(json_escape "$ap_earfcn1")" || printf 'null,'
+          printf '"earfcn_ul":'; [ -n "$ap_earfcn2" ] && printf '"%s",' "$(json_escape "$ap_earfcn2")" || printf 'null,'
+
+          # bandwidth numerik (MHz)
+          printf '"bw_dl":'; [ -n "$bw_dl" ] && printf '%s,' "$bw_dl" || printf 'null,'
+          printf '"bw_ul":'; [ -n "$bw_ul" ] && printf '%s,' "$bw_ul" || printf 'null,'
+
+          # freq
+          printf '"freq_dl":'; [ -n "$ap_freq1" ] && printf '"%s",' "$ap_freq1" || printf 'null,'
+          printf '"freq_ul":'; [ -n "$ap_freq2" ] && printf '"%s"' "$ap_freq2" || printf 'null'
+        printf '},'
+
+        printf '"connection":{'
+          printf '"crx":"%s",' "$(json_escape "$CUR_RX")"
+          printf '"ctx":"%s",' "$(json_escape "$CUR_TX")"
+          printf '"trx":"%s",' "$(json_escape "$TOT_RX")"
+          printf '"ttx":"%s",' "$(json_escape "$TOT_TX")"
+          printf '"cconn":"%s",' "$(json_escape "$CUR_TIME")"
+          printf '"tconn":"%s"' "$(json_escape "$TOT_TIME")"
+        printf '},'
+        
+        printf '"traffic":{'
+          printf '"rx":"%s",' "$(json_escape "${SPEED_RX_TXT:-}")"
+          printf '"tx":"%s"' "$(json_escape "${SPEED_TX_TXT:-}")"
+        printf '},'
+
+        printf '"device":{'
+          printf '"model":'; [ -n "$dev_name" ] && printf '"%s",' "$(json_escape "$dev_name")" || printf 'null,'
+          printf '"software":'; [ -n "$dev_sw" ] && printf '"%s",' "$(json_escape "$dev_sw")" || printf 'null,'
+          printf '"webui":'; if [ -n "$dev_webui" ]; then printf '"%s"' "$(json_escape "$dev_webui")"; else printf 'null'; fi
+        printf '}'
+
       printf '}'
     printf '}'
   }
@@ -335,5 +352,5 @@ JSON_OUT="$(
 if command -v jq >/dev/null 2>&1; then
   printf '%s\n' "$JSON_OUT" | jq .
 else
-  printf '%s\n' "$JSON_OUT" | pretty_json
+  printf '%s\n' "$JSON_OUT"
 fi
