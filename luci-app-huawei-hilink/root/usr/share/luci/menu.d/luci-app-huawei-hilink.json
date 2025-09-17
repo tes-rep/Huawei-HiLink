@@ -11,7 +11,7 @@
 			"uci": { "hilink": true }
 		}
 	},
-	"admin/modem/huawei_hilink/detail": {
+	"admin/modem/huawei_hilink/details": {
 		"title": "Details",
 		"order": 10,
 		"action": {
@@ -19,10 +19,19 @@
 			"path": "huawei_hilink/details"
 		}
 	},
+	
+	"admin/modem/huawei_hilink/message": {
+		"title": "Messages",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "huawei_hilink/message"
+		}
+	},
 
 	"admin/modem/huawei_hilink/config": {
 		"title": "Configuration",
-		"order": 20,
+		"order": 30,
 		"action": {
 			"type": "view",
 			"path": "huawei_hilink/config"
