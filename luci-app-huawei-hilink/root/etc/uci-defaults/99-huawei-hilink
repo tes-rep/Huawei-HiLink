@@ -1,9 +1,10 @@
 #!/bin/sh
 
-if [ ! -L /www/cgi-bin/huawei_hilink ]; then
-    ln -s /usr/bin/huawei_hilink /www/cgi-bin/huawei_hilink
-fi
+for f in huawei_hilink huawei_sms read_sms delete_sms; do
+    if [ ! -L /www/cgi-bin/$f ]; then
+        ln -s /usr/share/huawei_hilink/$f /www/cgi-bin/$f
+    fi
+    sleep 1
+done
 
-sleep 1
-
-chmod +x /usr/bin/huawei_hilink
+chmod +x /usr/share/huawei_hilink/*
