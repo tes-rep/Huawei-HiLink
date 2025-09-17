@@ -1,3 +1,5 @@
+
 config hilink 'auth'
-	option ip '192.168.8.1'
-	option network '@wan1'
+    option ip '192.168.8.1'
+    option user 'admin'
+    option pass 'admin123'
