@@ -1,9 +1,10 @@
 #!/bin/sh
 
 for f in huawei_hilink huawei_sms read_sms delete_sms; do
-    if [ ! -L /www/cgi-bin/$f ]; then
-        ln -s /usr/share/huawei_hilink/$f /www/cgi-bin/$f
+    if [ -L /www/cgi-bin/$f ]; then
+        rm /www/cgi-bin/$f
     fi
+    ln -s /usr/share/huawei_hilink/$f /www/cgi-bin/$f
     sleep 1
 done
 
