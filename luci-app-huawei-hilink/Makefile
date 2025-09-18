@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for Huawei HiLink modem.
-LUCI_DEPENDS:=+luci openssl-util
+LUCI_DEPENDS:=+luci +openssl-util
 LUCI_DESCRIPTION:=This package contains LuCI configuration pages for Huawei modem.
 LUCI_MAINTAINER:=Maizil41 <https://github.com/maizil41>
 
