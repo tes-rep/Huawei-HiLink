@@ -4,7 +4,7 @@
 </div>
 
 <div align="center">
-  <img alt="License" src="https://img.shields.io/github/license/Maizil41/Huawei-HiLink?style=for-the-badge&logo=github">
+  <a target="_blank" href="#"><img alt="License" src="https://img.shields.io/github/license/Maizil41/Huawei-HiLink?style=for-the-badge&logo=github"></a>
   <a target="_blank" href="https://github.com/Maizil41/Huawei-HiLink/releases"><img src="https://img.shields.io/github/release/Maizil41/Huawei-HiLink?style=for-the-badge&logo=huawei"></a>
   <a target="_blank" href="https://github.com/Maizil41/Huawei-HiLink/releases"><img src="https://img.shields.io/github/downloads/Maizil41/Huawei-HiLink/total?style=for-the-badge&logo=dropbox"></a>
 </div>
