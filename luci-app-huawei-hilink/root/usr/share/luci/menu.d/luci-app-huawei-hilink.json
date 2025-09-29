@@ -1,5 +1,5 @@
 {
-	"admin/modem/huawei_hilink": {
+	"admin/services/huawei_hilink": {
 		"title": "Huawei HiLink",
 		"order": 10,
 		"action": {
@@ -11,7 +11,7 @@
 			"uci": { "hilink": true }
 		}
 	},
-	"admin/modem/huawei_hilink/details": {
+	"admin/services/huawei_hilink/details": {
 		"title": "Details",
 		"order": 10,
 		"action": {
@@ -20,7 +20,7 @@
 		}
 	},
 	
-	"admin/modem/huawei_hilink/message": {
+	"admin/services/huawei_hilink/message": {
 		"title": "Messages",
 		"order": 20,
 		"action": {
@@ -29,7 +29,7 @@
 		}
 	},
 
-	"admin/modem/huawei_hilink/config": {
+	"admin/services/huawei_hilink/config": {
 		"title": "Configuration",
 		"order": 30,
 		"action": {
