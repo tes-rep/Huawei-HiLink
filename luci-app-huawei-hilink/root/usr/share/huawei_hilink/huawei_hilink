@@ -3,7 +3,7 @@
 
 set +o nounset
 DEBUG="${DEBUG:-0}"
-DBGLOG="/tmp/mutiara_debug.log"
+DBGLOG="/tmp/hilink_debug.log"
 : > "$DBGLOG" 2>/dev/null || true
 
 dlog() {
@@ -69,7 +69,7 @@ xget() {
   printf '%s' "$1" | tr -d '\n' | sed -n "s:.*<$2>\\([^<]*\\)</$2>.*:\\1:p"
 }
 
-COOKIEJAR="/tmp/mutiara_cookiejar"
+COOKIEJAR="/tmp/hilink_cookiejar"
 USER="$(uci -q get hilink.auth.user 2>/dev/null || true)"
 RAW_PASS="$(uci -q get hilink.auth.pass 2>/dev/null || true)"
 

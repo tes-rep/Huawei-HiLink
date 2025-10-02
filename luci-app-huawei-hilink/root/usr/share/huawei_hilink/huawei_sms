@@ -3,7 +3,7 @@
 
 set +o nounset
 DEBUG="${DEBUG:-0}"
-DBGLOG="/tmp/mutiara_sms_unified_debug.log"
+DBGLOG="/tmp/hilink_sms.log"
 : > "$DBGLOG" 2>/dev/null || true
 
 dlog() {
@@ -56,7 +56,7 @@ fail() {
   exit 0
 }
 
-COOKIEJAR="/tmp/mutiara_cookiejar"
+COOKIEJAR="/tmp/hilink_cookiejar"
 USER="$(uci -q get hilink.auth.user 2>/dev/null || true)"
 RAW_PASS="$(uci -q get hilink.auth.pass 2>/dev/null || true)"
 
