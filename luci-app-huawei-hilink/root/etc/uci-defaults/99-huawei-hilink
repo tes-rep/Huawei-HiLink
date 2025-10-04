@@ -1,11 +1,77 @@
 #!/bin/sh
 
-for f in huawei_hilink huawei_sms read_sms delete_sms; do
-    if [ -L /www/cgi-bin/$f ]; then
-        rm /www/cgi-bin/$f
-    fi
-    ln -s /usr/share/huawei_hilink/$f /www/cgi-bin/$f
-    sleep 1
-done
+set -eu
 
-chmod +x /usr/share/huawei_hilink/*
+CGI_DIR="/www/cgi-bin"
+SRC_DIR="/usr/share/huawei_hilink"
+
+LINKS="huawei_hilink huawei_sms"
+REMOVE_ONLY="read_sms delete_sms"
+
+log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+ensure_dirs() {
+    if [ ! -d "$CGI_DIR" ]; then
+        mkdir -p "$CGI_DIR"
+        log "Create dir: $CGI_DIR"
+    fi
+    if [ ! -d "$SRC_DIR" ]; then
+        log "ERROR: Source dir does not exist: $SRC_DIR"
+        exit 1
+    fi
+}
+
+remove_old_symlinks() {
+    for f in $LINKS $REMOVE_ONLY; do
+        if [ -L "$CGI_DIR/$f" ]; then
+            rm -f "$CGI_DIR/$f"
+            log "Remove symlink: $CGI_DIR/$f"
+        fi
+    done
+}
+
+create_symlinks() {
+    for f in $LINKS; do
+        if [ -e "$SRC_DIR/$f" ]; then
+            ln -s "$SRC_DIR/$f" "$CGI_DIR/$f"
+            log "Link  : $CGI_DIR/$f -> $SRC_DIR/$f"
+        else
+            log "WARN : Target lost, pass: $SRC_DIR/$f"
+        fi
+    done
+}
+
+make_executable() {
+    for f in $LINKS; do
+        if [ -e "$SRC_DIR/$f" ]; then
+            chmod +x "$SRC_DIR/$f"
+            log "Chmod : +x $SRC_DIR/$f"
+        fi
+    done
+}
+
+validate() {
+    missing=0
+    for f in $LINKS; do
+        if [ ! -L "$CGI_DIR/$f" ]; then
+            log "ERROR: Symlink is not created: $CGI_DIR/$f"
+            missing=$((missing+1))
+        fi
+    done
+    if [ "$missing" -eq 0 ]; then
+        log "OK   : All symlinks are ready.)"
+    else
+        log "ERROR: There was a $missing error. Check the log above."
+        exit 1
+    fi
+}
+
+main() {
+    ensure_dirs
+    remove_old_symlinks
+    create_symlinks
+    make_executable
+    validate
+}
+
+main "$@"
